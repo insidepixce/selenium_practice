@@ -31,12 +31,22 @@ driver.get("https://www.youtube.com/")
 search_box = driver.find_element(By.NAME, "search_query")
 search_box.send_keys(search_query)
 
+# 검색 버튼 클릭을 위해 대기
+search_button_locator = (By.ID, "search-icon-legacy")
+wait.until(EC.element_to_be_clickable(search_button_locator))
 # 검색 버튼 클릭
 search_button = driver.find_element(By.ID, "search-icon-legacy")
 search_button.click()
 
+
+
 # 검색 결과가 로딩될 때까지 대기
+search_results_locator = (By.ID,"video-title")
 wait.until(EC.presence_of_element_located((By.ID, "video-title")))
+
+# 로딩될 때까지 대기 
+capture_delay= 4
+time.sleep(capture_delay)
 
 # 스크린샷 캡쳐
 screenshot_path = "youtube"
