@@ -31,6 +31,7 @@ def scroll_to_next_page():
     except TimeoutException:
         pass
 
+max_save_attempts = 3
 target_video_count = 30  # 총 30개 동영상 스크랩
 videos_per_scroll = 4   # 4개 동영상 스크랩 후 스크롤
 
@@ -102,26 +103,35 @@ max_workers = 5  # 최대 동시 작업 수 조정
 data = [] 
 while len(data) < target_video_count:
     video_elements = driver.find_elements(By.CSS_SELECTOR, "ytd-video-renderer")
+
     if not video_elements:
-        print("썸네일을 가져올 수 없어 스크롤합니다")
+        print("썸네일을 가져올 수 없어 스크롤합니다0000000000000")
         scroll_to_next_page()
         time.sleep(scroll_pause_time)
         continue
 
-    for i in range(0, len(video_elements), videos_per_scroll):
-        videos_to_scrap = video_elements[i:i+videos_per_scroll]
+    save_attempt = 0
+    while save_attempt < max_save_attempts:
+        videos_to_scrap = video_elements[:videos_per_scroll]
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(process_video, video) for video in videos_to_scrap]
             for future in concurrent.futures.as_completed(futures):
                 data.append(future.result())
 
-        # 4개 동영상 스크랩 후 스크롤
+        # 스크랩 성공 시 다음 스크롤로 이동
         if len(data) >= target_video_count:
             break
         else:
             scroll_to_next_page()
             time.sleep(scroll_pause_time)
+
+            save_attempt += 1
+            if save_attempt < max_save_attempts:
+                print(f"저장이 실패했습니다. 스크롤을 더 하여 다시 시도합니다 /////////////(시도 {save_attempt + 1}/{max_save_attempts})")
+            else:
+                print(f"저장이 여러 번 시도했지만 실패했습니다. 프로그램을 종료합니다.++++++++++++++++")
+
 
 
 info_folder = f"movies/{search_query}/INFO/"
