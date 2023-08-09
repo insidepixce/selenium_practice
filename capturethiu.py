@@ -24,7 +24,17 @@ def safe_create_directory(path):
 def sanitize_filename(filename):
     s = re.sub(r'[\\/*?:"<>|]', "", filename)
     return s.strip()
+def scroll_to_next_page():
+    driver.execute_script("window.scrollTo(0, document.documentElement.scrollHeight);")
+    try:
+        wait.until(EC.presence_of_element_located((By.ID, "continuations")))
+    except TimeoutException:
+        pass
 
+target_video_count = 30  # 총 30개 동영상 스크랩
+videos_per_scroll = 4   # 4개 동영상 스크랩 후 스크롤
+
+data = []
 def get_thumbnail_url(video):
     thumbnail_img_element = WebDriverWait(video, timeout=10).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, "yt-img img"))
@@ -60,9 +70,9 @@ def process_video(video):
         safe_create_directory(thumbnail_folder)
         thumbnail_path = f"{thumbnail_folder}{sanitized_title}.jpg"
         urllib.request.urlretrieve(thumbnail_src, thumbnail_path)
-        print(f"('{title}'의 '{thumbnail_path}/{sanitized_title}/{uploader}/{views}' )를 저장했습니다")
+        print(f"('{title}'의 '{thumbnail_path}/{sanitized_title}/{uploader}/{views}' )를 >>>>>>>>>>>>.저장<<<<<<<<<<<<<<<<<<<했습니다")
     else:
-        print(f"('{title}')의 썸네일을 가져올 수 없습니다")
+        print(f"('{title}')의 썸네일을 가져올 수 없습니다//////////////////////////")
         thumbnail_path = ""  # 이미지 없을 경우 빈 문자열 할당
 
     return [title, uploader, views, thumbnail_path]
@@ -83,37 +93,35 @@ driver.get("https://www.youtube.com/")
 search_box = wait.until(EC.element_to_be_clickable((By.NAME, "search_query")))
 search_box.clear()
 search_box.send_keys(search_query)
-search_box.send_keys(Keys.RETURN)
 time.sleep(4)
+search_box.send_keys(Keys.RETURN)
+
 
 scroll_pause_time = 3  # 스크롤 간격을 3초로 조정
 max_workers = 5  # 최대 동시 작업 수 조정
 data = [] 
-target_video_count = 10  
 while len(data) < target_video_count:
     video_elements = driver.find_elements(By.CSS_SELECTOR, "ytd-video-renderer")
-
     if not video_elements:
         print("썸네일을 가져올 수 없어 스크롤합니다")
-        driver.execute_script("window.scrollTo(0, document.documentElement.scrollHeight);")
-        try:
-            wait.until(EC.presence_of_element_located((By.ID, "continuations")))
-        except TimeoutException:
-            break
+        scroll_to_next_page()
         time.sleep(scroll_pause_time)
         continue
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(process_video, video) for video in video_elements]
-        for future in concurrent.futures.as_completed(futures):
-            data.append(future.result())
+    for i in range(0, len(video_elements), videos_per_scroll):
+        videos_to_scrap = video_elements[i:i+videos_per_scroll]
 
-    driver.execute_script("window.scrollTo(0, document.documentElement.scrollHeight);")
-    try:
-        wait.until(EC.presence_of_element_located((By.ID, "continuations")))
-    except TimeoutException:
-        break
-    time.sleep(scroll_pause_time)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_video, video) for video in videos_to_scrap]
+            for future in concurrent.futures.as_completed(futures):
+                data.append(future.result())
+
+        # 4개 동영상 스크랩 후 스크롤
+        if len(data) >= target_video_count:
+            break
+        else:
+            scroll_to_next_page()
+            time.sleep(scroll_pause_time)
 
 
 info_folder = f"movies/{search_query}/INFO/"
