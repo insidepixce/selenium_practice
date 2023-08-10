@@ -1,88 +1,73 @@
+import re
+import time
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
+from bs4 import BeautifulSoup
+from PIL import Image
+from openpyxl import Workbook
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import collections
-import re
 
+# 검색어 입력
+search_query = input("검색어를 입력하세요: ")
 
-chromedriver_path = "/Users/inseoulmate/Downloads/chromedriver-mac-arm64/chromedriver"
-service = Service(chromedriver_path)
-driver = webdriver.Chrome(service=service)
+# Selenium WebDriver 설정
+driver = webdriver.Chrome()
+driver.get("https://www.youtube.com/")
 
-articles = []
-page = 1
+# 검색어 입력란에 검색어 입력
+search_box = driver.find_element(By.NAME, "search_query")
+search_box.send_keys(search_query)
 
-while page <= 60:  # Limit data collection to 60 pages
-    url = f"https://news.naver.com/main/main.naver?mode=LSD&mid=shm&sid1=100#&date=%2000:00:00&page={page}"
-    driver.get(url)
-    wait = WebDriverWait(driver, 30)
-    wait.until(EC.presence_of_element_located((By.CLASS_NAME, "sh_text")))
-    article_number = (page - 1) * 30 + 1
-    news_items = driver.find_elements(By.CLASS_NAME, "sh_text")
+# Enter 키 입력
+search_box.send_keys(Keys.RETURN)
 
-    for item in news_items:
-        try:
-            press = item.find_element(By.CLASS_NAME, "sh_text_press").text
-        except:
-            press = ""
+# 스크롤 및 영상 정보 수집
+video_data = []
+scroll_pause_time = 2
+scroll_limit = 5  # 스크롤 횟수 제한
 
-        try:
-            headline = item.find_element(By.CLASS_NAME, "sh_text_headline").text
-        except:
-            headline = ""
+for scroll in range(scroll_limit):
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    time.sleep(scroll_pause_time)
 
-        try:
-            preview = item.find_element(By.CLASS_NAME, "sh_text_lede").text
-        except:
-            preview = ""
+    # 영상 정보 스크래핑
+    video_elements = driver.find_elements(By.TAG_NAME, "ytd-video-renderer")
 
-        try:
-            link = item.find_element(By.CLASS_NAME, "sh_text_headline").get_attribute("href")
-        except:
-            link = ""
+    for video_element in video_elements:
+        # 영상 정보 스크래핑 (이전 코드와 동일)
+        title = video_element.find_element(By.ID, "video-title").text
+        sanitized_title = re.sub(r'[^\w\s]', '', title)
 
-        article = {
-            "번호": article_number,
-            "언론사": press,
-            "기사 제목": headline,
-            "미리보기 내용": preview,
-            "기사 링크": link
-        }
-        articles.append(article)
-        article_number += 1
+        # 썸네일 컨테이너 대기
+        wait = WebDriverWait(driver, 10)
+        thumbnail_container = wait.until(EC.presence_of_element_located((By.ID, "thumbnail")))
 
-    # Check if the "헤드라인 더보기" button is present on the page
-    more_button = driver.find_element(By.XPATH, "//a[contains(@class, 'cluster_more_inner')]")
-    if "more" in more_button.get_attribute("class"):
-        # Click the "헤드라인 더보기" button using JavaScript to bypass element intercept
-        driver.execute_script("arguments[0].click();", more_button)
-        page += 1
-    else:
-        # If the "헤드라인 더보기" button is not present, exit the loop
-        break
+        # 썸네일 스크린샷 저장
+        thumbnail_path = f"movies/{search_query}/{sanitized_title}.png"
+        driver.execute_script("arguments[0].style.visibility='visible';", thumbnail_container)
+        driver.save_screenshot(thumbnail_path)
+        driver.execute_script("arguments[0].style.visibility='hidden';", thumbnail_container)
 
+        video_data.append({
+            "title": sanitized_title,
+            "thumbnail_path": thumbnail_path
+        })
+
+# 스크래핑된 영상 정보를 엑셀에 저장
+wb = Workbook()
+ws = wb.active
+
+for data in video_data:
+    row = [
+        data["thumbnail_path"],
+        data["title"]
+    ]
+    ws.append(row)
+
+excel_path = f"YOUTUBE/{search_query}/{search_query}_excel.xlsx"
+wb.save(excel_path)
+
+# WebDriver 종료
 driver.quit()
-text = " ".join([article["기사 제목"] + " " + article["미리보기 내용"] for article in articles])
-def extract_keywords(text, num_top_keywords=10):
-    words = re.findall(r'\w+', text.lower())
-    counter = collections.Counter(words)
-    return counter.most_common(num_top_keywords)
-top_keywords = extract_keywords(text, num_top_keywords=10)
-print("가장 많이 나온 키워드 Top 10:")
-for keyword, count in top_keywords:
-    print(f"{keyword}: {count}회")
-print("\n기사 목록:")
-for article in articles:
-    print(f"{article['번호']}. {article['언론사']} - {article['기사 제목']} ({article['기사 링크']})")
-keywords_str = "가장 많이 나온 키워드 Top 10:\n"
-for keyword, count in top_keywords:
-    keywords_str += f"{keyword}: {count}회\n"
-with open("top_keywords.txt", "w", encoding="utf-8") as file:
-    file.write(keywords_str)
-articles_str = "기사 목록:\n"
-for article in articles:
-    articles_str += f"{article['번호']}. {article['언론사']} - {article['기사 제목']} ({article['기사 링크']})\n"
-with open("articles_list.txt", "w", encoding="utf-8") as file:
-    file.write(articles_str)

@@ -1,3 +1,4 @@
+import os
 import re
 import time
 from selenium import webdriver
@@ -12,6 +13,10 @@ from selenium.webdriver.support import expected_conditions as EC
 # 검색어 입력
 search_query = input("검색어를 입력하세요: ")
 
+# 디렉토리 생성
+if not os.path.exists(f"youtube/{search_query}"):
+    os.makedirs(f"youtube/{search_query}")
+
 # Selenium WebDriver 설정
 driver = webdriver.Chrome()
 driver.get("https://www.youtube.com/")
@@ -19,10 +24,7 @@ driver.get("https://www.youtube.com/")
 # 검색어 입력란에 검색어 입력
 search_box = driver.find_element(By.NAME, "search_query")
 search_box.send_keys(search_query)
-
-# 일정 시간 대기
-time.sleep(2)  # 예시로 2초 대기
-
+time.sleep(5)
 # Enter 키 입력
 search_box.send_keys(Keys.RETURN)
 
@@ -39,24 +41,27 @@ for scroll in range(scroll_limit):
     video_elements = driver.find_elements(By.TAG_NAME, "ytd-video-renderer")
 
     for video_element in video_elements:
-        # 영상 정보 스크래핑 (이전 코드와 동일)
-        title = video_element.find_element(By.ID, "video-title").text
-        sanitized_title = re.sub(r'[^\w\s]', '', title)
+        try:
+            # 영상 정보 스크래핑 (이전 코드와 동일)
+            title = video_element.find_element(By.ID, "video-title").text
+            sanitized_title = re.sub(r'[^\w\s]', '', title)
 
-        # 썸네일 컨테이너 대기
-        wait = WebDriverWait(driver, 10)
-        thumbnail_container = wait.until(EC.presence_of_element_located((By.ID, "thumbnail")))
+            # 썸네일 컨테이너 대기
+            wait = WebDriverWait(driver, 10)
+            thumbnail_container = wait.until(EC.presence_of_element_located((By.ID, "thumbnail")))
 
-        # 썸네일 스크린샷 저장
-        thumbnail_path = f"movies/{search_query}/{sanitized_title}.png"
-        driver.execute_script("arguments[0].style.display='block';", thumbnail_container)
-        driver.save_screenshot(thumbnail_path)
-        driver.execute_script("arguments[0].style.display='none';", thumbnail_container)
+            # 썸네일 스크린샷 저장
+            thumbnail_path = f"youtube/{search_query}/{sanitized_title}.png"
+            driver.execute_script("arguments[0].style.visibility='visible';", thumbnail_container)
+            driver.save_screenshot(thumbnail_path)
+            driver.execute_script("arguments[0].style.visibility='hidden';", thumbnail_container)
 
-        video_data.append({
-            "title": sanitized_title,
-            "thumbnail_path": thumbnail_path
-        })
+            video_data.append({
+                "title": sanitized_title,
+                "thumbnail_path": thumbnail_path
+            })
+        except Exception as e:
+            print("영상 정보 스크래핑 중 오류 발생:", e)
 
 # 스크래핑된 영상 정보를 엑셀에 저장
 wb = Workbook()
@@ -69,7 +74,7 @@ for data in video_data:
     ]
     ws.append(row)
 
-excel_path = f"YOUTUBE/{search_query}/{search_query}_excel.xlsx"
+excel_path = f"youtube/{search_query}/{search_query}_excel.xlsx"
 wb.save(excel_path)
 
 # WebDriver 종료
